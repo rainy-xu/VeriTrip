@@ -1,4 +1,4 @@
-# AI-Powered Travel Planning Agent
+# VeriTrip
 
 This repository contains the code for an AI-powered travel planning system that uses large language models (LLMs) with retrieval-augmented search, vision-language capabilities, and multi-dimensional evaluation of generated travel plans.
 
