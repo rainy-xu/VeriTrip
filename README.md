@@ -98,11 +98,6 @@ python search_agent_w_img_retriver/openai_client_vl_retriver.py \
 
 Replace `openai_client_vl_retriver.py` with the appropriate client file (`claude_client_vl_retriver.py`, `gemini_client_vl_retriver.py`, etc.) for different LLM providers.
 
-**Example query input format** (CSV or plain text):
-```
-Day 1-3, New York City, $5000, 2 adults
-Must-see attractions: Statue of Liberty, Central Park
-Preferences: vegetarian-friendly, near subway
 ```
 
 ### 3. Evaluate Generated Plans
@@ -119,14 +114,6 @@ The evaluation produces three metrics:
 - **Trustworthiness score**: factual accuracy against ground truth (transport IDs, hotel prices ±10%, attraction opening hours)
 - **Route optimality (Average Margin)**: TSP-based metric comparing planned routes vs. optimal routes
 
-## Output Format
-
-The LLM agent generates structured travel plans with three tables:
-- `transportationTable`: flights, trains, with specific trip IDs and times
-- `accomdationTable`: hotel name, room type, price per night, breakfast info
-- `itineraryTable`: daily schedule with POIs, visit durations, and meals
-
-See `search_agent_w_img_retriver/prompts.py` (`QUERY_TEMPLATE`) for the exact format specification.
 
 ## Architecture Overview
 
