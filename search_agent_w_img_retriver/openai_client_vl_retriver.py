@@ -26,32 +26,24 @@ from typing import List, Any, Dict
 from .tool_handler import SearchToolHandler, RestaurantToolHandler, ImageToolHandler, CombinedToolHandler
 import io
 import base64
-# Function to encode the image
-# def encode_image(image_path):
-#     with open(image_path, "rb") as image_file:
-#         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
 def compress_image_to_base64(image_path, max_size=(1024, 1024), quality=85):
-    """压缩图片并转换为base64"""
+
 
     with Image.open(image_path) as img:
-        # ✅ 关键：转换为RGB模式
+
         if img.mode in ('P', 'RGBA', 'LA', 'L'):
-            # P: 调色板模式
-            # RGBA: 带透明通道
-            # LA: 灰度+透明
-            # L: 灰度
             img = img.convert('RGB')
         
-        # 保持宽高比缩放
+
         img.thumbnail(max_size, Image.Resampling.LANCZOS)
         
-        # 保存到字节流
+
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG', quality=quality)
         
-        # 转换为base64
+
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return img_base64
 
@@ -217,10 +209,6 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                 try:
                     base64_img = compress_image_to_base64(path)
                     image_content.append(
-                    #     {
-                    #     "type": "image_url",
-                    #     "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-                    # }
                         {
                         "type": "image_url",
                         "image_url": {
@@ -230,7 +218,6 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                 except Exception as e:
                     print(f"Could not encode retrieved image {path}: {e}")
             
-            # 将图片作为下一轮的背景信息输入
             input_messages.append({
                 "role": "user",
                 "content": image_content
@@ -248,7 +235,6 @@ def extract_docids(results):
     ids = []
     for item in results:
         if item['type'] == 'tool_call' and item['output']:
-            # 简单从字符串中正则匹配 docid
             found = re.findall(r'"docid":\s*"?(\d+)"?', item['output'])
             ids.extend(found)
     return list(dict.fromkeys(ids)) 
@@ -405,7 +391,7 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 continue
             
             queries.append((query_id, query_text, image_list))
-    # breakpoint()
+
     processed_ids = set()
     if out_dir.exists():
         for json_path in out_dir.glob("run_*.json"):
