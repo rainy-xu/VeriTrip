@@ -67,7 +67,6 @@ class ImageIndexingManager:
         return index, all_embeddings
 
     def search_similar_by_path(self, query_img_path: str, k: int = 3) -> List[Dict[str, Any]]:
-        """根据输入的本地图片路径搜索相似图片"""
         if not os.path.exists(query_img_path):
             return [{"error": f"Image path {query_img_path} not found"}]
         
@@ -86,30 +85,7 @@ class ImageIndexingManager:
             })
         return results
 
-    # def search_similar_by_id(self, file_name: int, k: int = 3) -> List[Dict[str, Any]]:
-    #     # idx = int(image_index)
-        
-    #     # if idx >= len(self.files):
-    #     #     return [{"error": f"Index {idx} out of range (max {len(self.files)-1})"}]
-            
-    #     # file_name = self.files[idx]
-        
-    #     if file_name not in self.all_embeddings:
-    #         return [{"error": f"Embedding for {file_name} not found"}]
 
-    #     query_vector = np.array(self.all_embeddings[file_name]).astype('float32')
-        
-    #     # 执行 faiss 搜索
-    #     distances, indices = self.index.search(query_vector, k)
-        
-    #     results = []
-    #     for i, res_idx in enumerate(indices[0]):
-    #         results.append({
-    #             "rank": i + 1,
-    #             "file_path": self.files[int(res_idx)],
-    #             "distance": float(distances[0][i])
-    #         })
-    #     return results
 
 
 if __name__ == "__main__":
