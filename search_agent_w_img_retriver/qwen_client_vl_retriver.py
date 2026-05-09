@@ -32,7 +32,6 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 def compress_image_to_base64(image_path, max_size=(1024, 1024), quality=85):
-    """压缩图片并转换为base64"""
 
     with Image.open(image_path) as img:
         if img.mode in ('P', 'RGBA', 'LA', 'L'):
@@ -97,9 +96,7 @@ def build_request_with_img_list(
         "messages": messages,
         "tools": tool_handler.get_tool_definitions(),
         "tool_choice": "auto",
-        # "enable_thinking":False
-        # "reasoning_effort"
-        # "truncation": "auto",
+
     }
     if not model.lower().startswith("o"):
         if temperature is not None:
@@ -166,7 +163,6 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                 cumulative_usage["output_tokens_details"]["reasoning_tokens"] += getattr(
                     usage.completion_tokens_details, 'reasoning_tokens', 0
                 )
-        # breakpoint()
         function_calls = message.tool_calls
         
         if function_calls is None:
@@ -217,7 +213,6 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                 except Exception as e:
                     print(f"Could not encode retrieved image {path}: {e}")
             
-            # 将图片作为下一轮的背景信息输入
             input_messages.append({
                 "role": "user",
                 "content": image_content
@@ -286,40 +281,7 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
                 "output": summary,
             })
 
-        # if itype == "function_call":
-        #     item_id = item.get("id")
-        #     tool_call_counts[item.get("name")] = tool_call_counts.get(item.get("name"), 0) + 1
-        #     normalized_results.append({
-        #         "type": "tool_call",
-        #         "tool_name": item.get("name"),
-        #         "arguments": item.get("arguments"),
-        #         "output": tool_outputs[item_id]["output"],
-        #     })
 
-        # elif itype == "reasoning":
-        #     summary = item.get("summary")
-        #     normalized_results.append({
-        #         "type": "reasoning",
-        #         "tool_name": None,
-        #         "arguments": None,
-        #         "output": summary,
-        #     })
-
-        # elif itype == "message":
-        #     parts = item.get("content", []) or []
-        #     text_chunks: list[str] = []
-        #     for part in parts:
-        #         if isinstance(part, dict) and part.get("type") == "output_text":
-        #             text_chunks.append(str(part.get("text", "")))
-        #     text = "\n".join(chunk for chunk in text_chunks if chunk).strip()
-        #     if text:
-        #         normalized_results.append({
-        #             "type": "output_text",
-        #             "tool_name": None,
-        #             "arguments": None,
-        #             "output": text,
-        #         })
-    
     normalized_usage = {
         "input_tokens": cumulative_usage["input_tokens"],
         "input_tokens_cached": cumulative_usage["input_tokens_details"]["cached_tokens"],
@@ -348,7 +310,7 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
         }, f, indent=2, ensure_ascii=False,default=str)
     
     print("Saved response to", filename, "| tool call counts:", tool_call_counts)
-    # breakpoint()
+
 
 
 
@@ -416,16 +378,6 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 print(f"Line {line_num}: Skipping query_id={query_id} - no images")
                 continue
             
-            # # Check if all images exist in caption dictionary
-            # skip = False
-            # for img_path in image_list:
-            #     img_basename = os.path.basename(img_path)
-            #     if img_basename not in caption:
-            #         print(f"Line {line_num}: Skipping query_id={query_id} - image {img_basename} not in caption")
-            #         skip = True
-            #         break
-            # if skip:
-            #     continue
             
             # Validate required fields
             if not query_id or not query_text:
@@ -433,7 +385,7 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 continue
             
             queries.append((query_id, query_text, image_list))
-    # breakpoint()
+
     processed_ids = set()
     if out_dir.exists():
         for json_path in out_dir.glob("run_*.json"):
@@ -474,8 +426,6 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
             top_p=args.top_p,
         )
         
-        # try:
-        # breakpoint()
         if True:
             response, combined_output, cumulative_usage, tool_outputs = run_conversation_with_tools(
                 client, request_body, tool_handler, args.max_iterations
