@@ -41,6 +41,7 @@ export DATA_PATH="/path/to/datasets"
 #   ├── {city}_{route}_trans_en.csv      # Ground truth transportation
 #   ├── {city}_{route}_accom_en.csv      # Ground truth accommodation
 #   └── {city}_{route}_attractions_en.csv # Ground truth attractions
+#   └── {city}_{route}_restaurants_en.csv # Ground truth restaurants
 ```
 
 ### Model Checkpoints
