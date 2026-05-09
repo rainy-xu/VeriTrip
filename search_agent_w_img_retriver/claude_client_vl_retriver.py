@@ -31,56 +31,19 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
-# def encode_image_and_get_mime_type(image_path: str) -> tuple[str, str]:
-#     """
-#     Encodes an image to Base64 and determines its MIME type.
 
-#     Args:
-#         image_path: The path to the image file.
-
-#     Returns:
-#         A tuple containing (base64_string, mime_type).
-#         Example: ('iVBORw0KGg...', 'image/png')
-#     """
-#     with open(image_path, "rb") as image_file:
-#         image_bytes = image_file.read()
-        
-#     # # 使用 Pillow 识别图片格式
-#     # try:
-#     img = Image.open(io.BytesIO(image_bytes))
-#     image_format = img.format.lower()
-#     if image_format == 'jpeg': # Pillow 对 jpeg 格式的名称是 'jpeg'
-#             mime_type = 'image/jpeg'
-#     else:
-#             mime_type = f"image/{image_format}"
-#     # except Exception:
-#     #     # 如果无法识别，可以给一个默认值或抛出错误
-#     #     # 对于大多数现代 API，直接用 jpeg 作为备选是常见的，但最好是能识别
-#     #     mime_type = 'image/jpeg' # Fallback, but risky
-
-#     base64_image = base64.b64encode(image_bytes).decode("utf-8")
-#     return base64_image, mime_type
 
 def compress_image_to_base64(image_path, max_size=(1024, 1024), quality=85):
-    """压缩图片并转换为base64"""
 
     with Image.open(image_path) as img:
-        # ✅ 关键：转换为RGB模式
         if img.mode in ('P', 'RGBA', 'LA', 'L'):
-            # P: 调色板模式
-            # RGBA: 带透明通道
-            # LA: 灰度+透明
-            # L: 灰度
             img = img.convert('RGB')
         
-        # 保持宽高比缩放
         img.thumbnail(max_size, Image.Resampling.LANCZOS)
         
-        # 保存到字节流
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG', quality=quality)
         
-        # 转换为base64
         img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
         return img_base64
 
@@ -102,34 +65,6 @@ def build_request_with_img_list(
         system_prompt = get_search_system_prompt('en')
         messages.append({'role': 'system', 'content': system_prompt})
         
-    # formatted_query = format_query(query, query_template)
-    # user_content = [{"type": "text", "text": formatted_query}]
-    # for img_path in img_list:
-    #     img_item_list = img_path.split('|')
-    #     for i in img_item_list:
-    #         try:
-    #             # base64_image = encode_image(i)
-    #             base64_image, mime_type = encode_image_and_get_mime_type(i)
-    #         except:
-    #             breakpoint()
-    #         # messages_content.append({
-    #         #     "type": "image_url",
-    #         #     "image_url": {
-    #         #         "url": f"data:image/jpeg;base64,{base64_image}"
-    #         #     }
-    #         # })
-    #         user_content.append({
-    #             "type": "text",
-    #             "text": f"{i}"
-    #         })
-    #         user_content.append({
-    #             "type": "image",
-    #             "source": {
-    #                 "type": "base64",
-    #                 "media_type": mime_type,
-    #                 "data": base64_image
-    #             }
-    #         })
     formatted_query = format_query(query, query_template)
     user_content = [{"type": "text", "text": formatted_query}]
     
@@ -146,17 +81,7 @@ def build_request_with_img_list(
                     "text": f"Image source: {i}"
                 })
                 
-                # --- [修正点]：改为 OpenAI 标准格式 ---
-                # 这种格式兼容 GPT-4o, Claude (通过 OneAPI/OpenRouter 转译), Gemini (通过 OneAPI 转译)
-                # user_content.append({
-                #     "type": "image_url",
-                #     "image_url": {
-                #         # 必须拼接成 data URI 格式
-                #         "url": f"data:{mime_type};base64,{base64_image}"
-                #     }
-                # })
                 
-                # --- [删除]：下面的 Anthropic 格式会导致 CE-005 错误 ---
                 user_content.append({
                     "type": "image",
                     "image_url": {
@@ -231,29 +156,28 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
         all_responses.append(response)
         
         message = response.choices[0].message
-        # 必须将模型返回的 message 原样转换并存入历史，包含 tool_calls
         input_messages.append(message.model_dump(exclude_none=True))
 
         if message:
             combined_output.append(message)
         
-        # 统计 Token 使用情况
+
         if hasattr(response, 'usage') and response.usage:
             usage = response.usage
             cumulative_usage["input_tokens"] += usage.prompt_tokens
             cumulative_usage["output_tokens"] += usage.completion_tokens
             cumulative_usage["total_tokens"] += usage.total_tokens
-            # ... (省略 cached/reasoning tokens 的统计)
+ 
 
         function_calls = message.tool_calls
         
-        # 如果模型没有调用工具，说明对话结束
+
         if function_calls is None or len(function_calls) == 0:
             return response, combined_output, cumulative_usage, tool_outputs
 
         new_retrieved_images = []
         
-        # 处理所有的工具调用
+
         for tool_call in function_calls:
             try:
                 tool_name = tool_call.function.name
@@ -265,8 +189,7 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                 if result is None:
                     result = ""
                 
-                # 核心修正：使用 OpenAI 标准的工具响应格式
-                # role 必须为 "tool", 必须包含 tool_call_id, content 必须为字符串
+
                 input_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -280,7 +203,7 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
                     "status": "completed"
                 }
                 
-                # 处理图片检索逻辑
+
                 if tool_name in visual_tool_names:
                     try:
                         search_results = json.loads(result)
@@ -293,14 +216,14 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
 
             except Exception as e:
                 print(f"Error executing tool {tool_call.function.name}: {e}")
-                # 即使报错也要返回 tool 响应，否则对话流会中断
+
                 input_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": f"Error: {str(e)}"
                 })
 
-        # 如果检索到了新图片，将其作为新的 User 消息插入，以便下一轮模型能看到图片
+
         if new_retrieved_images:
             image_content = [{"type": "text", "text": "Based on your visual search, I have retrieved the following images:"}]
             for path in new_retrieved_images:
@@ -321,137 +244,7 @@ def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, to
         
     return response, combined_output, cumulative_usage, tool_outputs
 
-# def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, tool_handler: CombinedToolHandler, max_iterations: int = 5):
-    
-#     input_messages = initial_request["messages"].copy()
-#     global_max_tokens = initial_request['max_tokens']
-    
-#     cumulative_usage = {
-#         "input_tokens": 0,
-#         "input_tokens_details": {"cached_tokens": 0},
-#         "output_tokens": 0,
-#         "output_tokens_details": {"reasoning_tokens": 0},
-#         "total_tokens": 0
-#     }
-    
-#     combined_output = []
-#     tool_outputs = {}
-#     all_responses = []
-#     visual_tool_names = ["search_similar_images_by_path"]
 
-#     for iteration in range(max_iterations):
-#         # Calculate remaining tokens for this round
-#         remaining_tokens = global_max_tokens - cumulative_usage["output_tokens"]
-#         if remaining_tokens <= 0:
-#             print(f"Warning: Reached global max_tokens limit ({global_max_tokens})")
-#             break
-        
-#         request = initial_request.copy()
-        
-#         request["messages"] = input_messages
-#         request["max_tokens"] = min(remaining_tokens, global_max_tokens)
-        
-#         response = client.chat.completions.create(**request)
-#         # breakpoint()
-#         all_responses.append(response)
-#         print(response)
-#         #idea custom
-#         message = response.choices[0].message
-
-#         input_messages.append(message.model_dump(exclude_none=True))
-
-#         if message:
-#             combined_output.append(message)
-        
-#         if hasattr(response, 'usage') and response.usage:
-#             usage = response.usage
-#             cumulative_usage["input_tokens"] += usage.prompt_tokens
-#             cumulative_usage["output_tokens"] += usage.completion_tokens
-#             cumulative_usage["total_tokens"] += usage.total_tokens
-            
-#             if hasattr(usage, 'input_tokens_details') and usage.prompt_tokens_details:
-#                 cumulative_usage["input_tokens_details"]["cached_tokens"] += getattr(
-#                     usage.prompt_tokens_details, 'cached_tokens', 0
-#                 )
-            
-#             if hasattr(usage, 'output_tokens_details') and usage.completion_tokens_details:
-#                 cumulative_usage["output_tokens_details"]["reasoning_tokens"] += getattr(
-#                     usage.completion_tokens_details, 'reasoning_tokens', 0
-#                 )
-
-#         function_calls = message.tool_calls
-        
-#         if function_calls is None:
-#             return response, combined_output, cumulative_usage, tool_outputs
-
-#         new_retrieved_images = []
-#         for tool_call in function_calls:
-#             # try:
-#             if True:
-#                 model_arguments = json.loads(tool_call.function.arguments)
-#                 tool_name = tool_call.function.name
-#                 result = tool_handler.execute_tool(tool_call.function.name, model_arguments)
-
-#                 if result is None:
-#                     result = ""
-#                 tool_outputs[tool_call.id] = {
-#                     "tool_name": tool_call.function.name, 
-#                     "arguments": model_arguments,          
-#                     "output": result,
-#                     "status": "completed",
-#                     "error": None
-#                 }
-#                 # tool_outputs[tool_call.id] = {
-#                 #     "output": result,
-#                 #     "status": "completed",
-#                 #     "error": None
-#                 # }
-                
-#                 # input_messages.append({
-#                 #     "role": "tool",
-#                 #     "call_id": tool_call.id,
-#                 #     "content": result
-#                 # })
-#                 input_messages.append({
-#                     "role": "tool",
-#                     "tool_call_id": tool_call.id,
-#                     "tool": tool_call.function.name, 
-#                     "content": result
-#                 })
-                
-#                 if tool_name in visual_tool_names:
-#                     try:
-#                         search_results = json.loads(result)
-#                         if isinstance(search_results, list):
-#                             for item in search_results:
-#                                 if "file_path" in item:
-#                                     new_retrieved_images.append(item["file_path"])
-#                     except Exception as e:
-#                         print(f"Error parsing visual tool output: {e}")  
-
-#         if new_retrieved_images:
-#             image_content = [{"type": "text", "text": "I have retrieved the following images based on your search. Please analyze them:"}]
-#             for path in new_retrieved_images:
-#                 try:
-#                     base64_img = compress_image_to_base64(path)
-#                     image_content.append({
-#                         "type": "image_url",
-#                         "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-#                     })
-#                 except Exception as e:
-#                     print(f"Could not encode retrieved image {path}: {e}")
-            
-#             # 将图片作为下一轮的背景信息输入
-#             input_messages.append({
-#                 "role": "user",
-#                 "content": image_content
-#             })
-#             print(f"Appended {len(new_retrieved_images)} retrieved images to next iteration.")
-        
-#     print(f"Warning: Conversation hit max iterations ({max_iterations})")
-    
-#     final_response = all_responses[-1] if all_responses else response
-#     return final_response, combined_output, cumulative_usage, tool_outputs
 
 
 def _persist_response(out_dir: str, request_body: dict, response, combined_output=None, cumulative_usage=None, tool_outputs: dict = None, *, query_id: str | None = None):
@@ -538,7 +331,7 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
         }, f, indent=2, ensure_ascii=False,default=str)
     
     print("Saved response to", filename, "| tool call counts:", tool_call_counts)
-#     # breakpoint()
+
 
 
 
@@ -591,13 +384,9 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
             
             # Handle image paths
             attraction_images_str = row.get('p_attraction_img', '').strip()
-            # breakpoint()
             attraction_images = attraction_images_str.split("|") if attraction_images_str else []
             attraction_images = [img.strip() for img in attraction_images if img.strip()]
             
-            # meal_images_str = row.get('p_meal_img', '').strip()
-            # meal_images = meal_images_str.split(",") if meal_images_str else []
-            # meal_images = [img.strip() for img in meal_images if img.strip()]
             
             image_list = attraction_images
             
@@ -606,16 +395,6 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 print(f"Line {line_num}: Skipping query_id={query_id} - no images")
                 continue
             
-            # # Check if all images exist in caption dictionary
-            # skip = False
-            # for img_path in image_list:
-            #     img_basename = os.path.basename(img_path)
-            #     if img_basename not in caption:
-            #         print(f"Line {line_num}: Skipping query_id={query_id} - image {img_basename} not in caption")
-            #         skip = True
-            #         break
-            # if skip:
-            #     continue
             
             # Validate required fields
             if not query_id or not query_text:
@@ -623,7 +402,6 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 continue
             
             queries.append((query_id, query_text, image_list))
-    # breakpoint()
     processed_ids = set()
     if out_dir.exists():
         for json_path in out_dir.glob("run_*.json"):
