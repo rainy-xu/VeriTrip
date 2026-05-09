@@ -41,7 +41,6 @@ def compress_image_to_base64(image_path, max_size=(1024, 1024), quality=85):
     with Image.open(image_path) as img:
         if img.mode != 'RGB':
             img = img.convert('RGB')
-        # 改用 BILINEAR 提升速度
         img.thumbnail(max_size, Image.Resampling.BILINEAR)
         buffer = io.BytesIO()
         img.save(buffer, format='JPEG', quality=quality)
@@ -59,7 +58,7 @@ def build_request_with_img_list(
     temperature: float | None = None,
     top_p: float | None = None,
 ):
-    # 1. 构建 System Instruction
+
     system_instruction = None
     if system_prompt:
         sys_text = get_search_system_prompt('en')
@@ -69,7 +68,7 @@ def build_request_with_img_list(
         
     formatted_query = format_query(query, query_template)
     
-    # 2. 构建 User Content (Text + Images)
+
     user_parts = [{"text": formatted_query}]
     
     for img_path in img_list:
@@ -77,10 +76,9 @@ def build_request_with_img_list(
         for i in img_item_list:
             if not i.strip(): continue
             try:
-                # 假设 encode_image 返回的是纯 Base64 字符串 (不带 data: 前缀)
+
                 base64_image = compress_image_to_base64(i)
                 
-                # Gemini REST API 使用 inlineData
                 user_parts.append({"text": f"Image source: {i}"})
                 user_parts.append({
                     "inlineData": {
@@ -99,25 +97,19 @@ def build_request_with_img_list(
         }
     ]
     
-    # 3. 构建 Tools
-    # OpenAI 格式: [{"type": "function", "function": {...}}]
-    # Gemini 格式: [{"functionDeclarations": [{...}]}]
     openai_tools = tool_handler.get_tool_definitions()
     gemini_tools = []
     if openai_tools:
-        # 提取内部的 function 定义
         funcs = [t['function'] for t in openai_tools if 'function' in t]
         if funcs:
             gemini_tools = [{"functionDeclarations": funcs}]
 
-    # 4. 构建 Generation Config
     generation_config = {
         "maxOutputTokens": max_tokens,
         "temperature": temperature if temperature is not None else 0.0,
         "topP": top_p if top_p is not None else 0.95,
     }
 
-    # 5. 组装最终 Body
     body = {
         "contents": contents,
         "tools": gemini_tools,
@@ -127,8 +119,6 @@ def build_request_with_img_list(
     if system_instruction:
         body["systemInstruction"] = system_instruction
 
-    # 可以在这里添加 safetySettings 如果需要
-    # body["safetySettings"] = [...]
 
     return body
 
@@ -141,13 +131,6 @@ async def run_conversation_with_tools_async(
     tool_handler: 'CombinedToolHandler', 
     max_iterations: int = 5
 ):
-    """
-    异步版工具调用循环。
-    优化点：
-    1. 异步 API 请求。
-    2. 并行执行多个工具调用。
-    3. 并行压缩新检索到的图片。
-    """
     contents = initial_request["contents"].copy()
     global_max_tokens = initial_request['generationConfig']['maxOutputTokens']
     
@@ -165,9 +148,6 @@ async def run_conversation_with_tools_async(
     loop = asyncio.get_running_loop()
 
     for iteration in range(max_iterations):
-        # 1. 异步发送请求
-        # 注意：这里假设 client 是 AsyncOpenAI，且其 create 方法能接受完整的 dict body
-        # 如果是标准的 OpenAI 异步调用，通常是 await client.chat.completions.create(**request_params)
         try:
             current_request = initial_request.copy()
             current_request["contents"] = contents
@@ -178,14 +158,13 @@ async def run_conversation_with_tools_async(
             print(f"API Error in iteration {iteration}: {e}")
             break
 
-        # 2. 统计 Token (兼容 Gemini 格式)
         if 'usageMetadata' in response:
             usage = response['usageMetadata']
             cumulative_usage["input_tokens"] = usage.get('promptTokenCount', 0)
             cumulative_usage["output_tokens"] = usage.get('candidatesTokenCount', 0)
             cumulative_usage["total_tokens"] = usage.get('totalTokenCount', 0)
 
-        # 3. 解析候选响应
+
         if 'candidates' not in response or not response['candidates']:
             break
             
@@ -197,35 +176,33 @@ async def run_conversation_with_tools_async(
             contents.append(content)
             combined_output.append(content)
 
-        # 4. 提取函数调用
+
         function_calls = [p['functionCall'] for p in parts if 'functionCall' in p]
         
         if not function_calls:
-            # 没有工具调用，任务完成
+
             return response, combined_output, cumulative_usage, tool_outputs
 
-        # 5. 【关键优化】并行执行工具调用
+
         async def _exec_tool(fc):
             name = fc['name']
             args = fc.get('args', {})
             try:
-                # 使用 run_in_executor 在线程池中运行同步的 execute_tool
                 res = await loop.run_in_executor(executor, tool_handler.execute_tool, name, args)
                 if res is None: res = "Success"
             except Exception as e:
                 res = str(e)
             return name, args, res
 
-        # 并发启动所有工具任务
+
         tool_tasks = [asyncio.create_task(_exec_tool(fc)) for fc in function_calls]
         tool_results = await asyncio.gather(*tool_tasks)
 
-        # 6. 处理工具结果
         new_retrieved_images = []
         function_response_parts = []
 
         for name, args, result in tool_results:
-            # 记录输出
+
             tool_outputs.append({
                 "tool_name": name,
                 "arguments": args,
@@ -240,7 +217,6 @@ async def run_conversation_with_tools_async(
                 }
             })
 
-            # 收集待处理图片
             if name in visual_tool_names:
                 try:
                     search_results = json.loads(result) if isinstance(result, str) else result
@@ -251,16 +227,15 @@ async def run_conversation_with_tools_async(
                 except Exception as e:
                     print(f"Error parsing visual tool output: {e}")
 
-        # 将工具响应推入上下文
+
         if function_response_parts:
             contents.append({
                 "role": "function",
                 "parts": function_response_parts
             })
 
-        # 7. 【关键优化】并行压缩新图片
+
         if new_retrieved_images:
-            # 在线程池中并行处理所有图片压缩
             img_tasks = [
                 loop.run_in_executor(executor, compress_image_to_base64, path) 
                 for path in new_retrieved_images
@@ -274,7 +249,6 @@ async def run_conversation_with_tools_async(
                     print(f"Error processing image {path}: {b64}")
                     continue
                 
-                # Gemini 风格的 user parts 拼接
                 image_content_parts.append({
                     "inlineData": {
                         "mimeType": "image/jpeg",
@@ -292,144 +266,7 @@ async def run_conversation_with_tools_async(
     return final_response, combined_output, cumulative_usage, tool_outputs
 
 
-# def run_conversation_with_tools(client: openai.OpenAI, initial_request: dict, tool_handler: CombinedToolHandler, max_iterations: int = 5):
-    
-#     contents = initial_request["contents"].copy()
-#     global_max_tokens = initial_request['generationConfig']['maxOutputTokens']
-    
-#     cumulative_usage = {
-#         "input_tokens": 0,
-#         "output_tokens": 0,
-#         "total_tokens": 0
-#     }
-    
-#     combined_output = []
-#     tool_outputs = []
-#     all_responses = []
-#     visual_tool_names = ["search_similar_images_by_path"]
 
-#     for iteration in range(max_iterations):
-#         # Calculate remaining tokens for this round
-#         current_request = initial_request.copy()
-#         current_request["contents"] = contents
-
-        
-#         # request["messages"] = input_messages
-#         # request["max_tokens"] = min(remaining_tokens, global_max_tokens)
-        
-#         response = client.chat.completions.create(current_request)
-#         # breakpoint()
-#         all_responses.append(response)
-#         print(response)
-#         #idea custom
-#         if 'usageMetadata' in response:
-#             usage = response['usageMetadata']
-#             cumulative_usage["input_tokens"] = usage.get('promptTokenCount', 0) # API通常返回累计值
-#             cumulative_usage["output_tokens"] = usage.get('candidatesTokenCount', 0)
-#             cumulative_usage["total_tokens"] = usage.get('totalTokenCount', 0)
-            
-#             # 简单的截断保护
-#             if cumulative_usage["output_tokens"] >= global_max_tokens:
-#                  print(f"Warning: Reached max output tokens")
-#                  break
-
-#         # 解析 Candidates
-#         if 'candidates' not in response or not response['candidates']:
-#             print("No candidates returned.")
-#             break
-            
-#         candidate = response['candidates'][0]
-#         content = candidate.get('content', {})
-#         parts = content.get('parts', [])
-        
-#         # 将模型的回复追加到历史记录
-#         # Gemini 返回的 content 包含 role='model' 和 parts
-#         if content:
-#             contents.append(content)
-#             combined_output.append(content)
-
-#         # 检查是否有函数调用 (functionCall)
-#         function_calls = [p['functionCall'] for p in parts if 'functionCall' in p]
-        
-#         if not function_calls:
-#             # 没有工具调用，对话结束
-#             return response, combined_output, cumulative_usage, tool_outputs
-
-#         # 处理工具调用
-#         new_retrieved_images = []
-#         function_response_parts = []
-
-#         for func_call in function_calls:
-#             func_name = func_call['name']
-#             func_args = func_call.get('args', {})
-            
-#             # print(f"Executing tool: {func_name}")
-            
-#             # 执行工具
-#             try:
-#                 result = tool_handler.execute_tool(func_name, func_args)
-#                 if result is None:
-#                     result = "Success" # Gemini 需要非空响应
-#             except Exception as e:
-#                 result = str(e)
-
-#             # 记录工具输出
-#             tool_outputs.append({
-#                 "tool_name": func_name,
-#                 "arguments": func_args,
-#                 "output": result,
-#                 "status": "completed"
-#             })
-            
-#             function_response_parts.append({
-#                 "functionResponse": {
-#                     "name": func_name,
-#                     "response": {"result": result} # 响应内容通常包装在对象中
-#                 }
-#             })
-
-#             # 处理视觉工具的图像返回
-#             if func_name in visual_tool_names:
-#                 try:
-#                     search_results = json.loads(result) if isinstance(result, str) else result
-#                     if isinstance(search_results, list):
-#                         for item in search_results:
-#                             if isinstance(item, dict) and "file_path" in item:
-#                                 new_retrieved_images.append(item["file_path"])
-#                 except Exception as e:
-#                     print(f"Error parsing visual tool output: {e}")
-
-#         # 将工具响应追加到历史记录 (Role: function)
-#         if function_response_parts:
-#             contents.append({
-#                 "role": "function",
-#                 "parts": function_response_parts
-#             })
-
-#         # 如果检索到了新图片，作为新的 User Message 追加
-#         if new_retrieved_images:
-#             image_content = [{"type": "text", "text": "I have retrieved the following images based on your search:"}]
-#             for path in new_retrieved_images:
-#                 try:
-#                     base64_img = compress_image_to_base64(path)
-#                     image_content.append({
-#                         "type": "image_url",
-#                         "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-#                     })
-#                 except Exception as e:
-#                     print(f"Could not encode retrieved image {path}: {e}")
-            
-#             contents.append({
-#                 "role": "user",
-#                 "parts": image_content
-#             })
-#             print(f"Appended {len(new_retrieved_images)} retrieved images to next iteration.")
-
-#     print(f"Warning: Conversation hit max iterations ({max_iterations})")
-    
-#     final_response = all_responses[-1] if all_responses else response
-
-#     return final_response, combined_output, cumulative_usage, tool_outputs
 
 
 def _persist_response(out_dir: str, request_body: dict, response, combined_output=None, cumulative_usage=None, tool_outputs: dict = None, *, query_id: str | None = None):
@@ -439,9 +276,8 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
     """
     
     os.makedirs(out_dir, exist_ok=True)
-    # breakpoint() # 可以在这里保留断点进行调试
 
-    # --- 步骤 1: 将 Pydantic 对象转换为字典列表 ---
+
     if combined_output and hasattr(combined_output[0], 'model_dump'):
         combined_output_dicts = [item.model_dump(mode="json", exclude_none=True) for item in combined_output]
     else:
@@ -465,16 +301,16 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
                 if not tool_name:
                     continue 
 
-                # 统计工具调用次数
+
                 tool_call_counts[tool_name] = tool_call_counts.get(tool_name, 0) + 1
                 
-                # --- 核心修正 2: 按顺序获取工具输出 ---
+
                 tool_output_content = "Error: Tool output not found or index out of bounds."
                 if tool_output_index < len(tool_outputs):
-                    # 从有序列表中按索引获取对应的输出
+
                     current_tool_output = tool_outputs[tool_output_index]
                     tool_output_content = current_tool_output.get("output", "Error: 'output' key missing in tool result.")
-                    tool_output_index += 1 # 移动到下一个输出
+                    tool_output_index += 1
                 
                 arguments = function_details.get("arguments")
                 try:
@@ -548,9 +384,6 @@ def _persist_response(out_dir: str, request_body: dict, response, combined_outpu
     print("Saved response to", filename, "| tool call counts:", tool_call_counts)
 
 
-
-        
-
 def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handler: CombinedToolHandler):
     """Process a CSV file of (id \t query) pairs sequentially and persist responses."""
     # breakpoint()
@@ -587,14 +420,10 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
             
             # Handle image paths
             attraction_images_str = row.get('p_attraction_img', '').strip()
-            # breakpoint()
+
             attraction_images = attraction_images_str.split("|") if attraction_images_str else []
             attraction_images = [img.strip() for img in attraction_images if img.strip()]
-            
-            # meal_images_str = row.get('p_meal_img', '').strip()
-            # meal_images = meal_images_str.split(",") if meal_images_str else []
-            # meal_images = [img.strip() for img in meal_images if img.strip()]
-            
+
             image_list = attraction_images
             
             # Skip if no images
@@ -602,24 +431,13 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
                 print(f"Line {line_num}: Skipping query_id={query_id} - no images")
                 continue
             
-            # # Check if all images exist in caption dictionary
-            # skip = False
-            # for img_path in image_list:
-            #     img_basename = os.path.basename(img_path)
-            #     if img_basename not in caption:
-            #         print(f"Line {line_num}: Skipping query_id={query_id} - image {img_basename} not in caption")
-            #         skip = True
-            #         break
-            # if skip:
-            #     continue
-            
             # Validate required fields
             if not query_id or not query_text:
                 print(f"Warning: Line {line_num} - Skipping row with missing id or nature_language: {row}")
                 continue
             
             queries.append((query_id, query_text, image_list))
-    # breakpoint()
+
     processed_ids = set()
     if out_dir.exists():
         for json_path in out_dir.glob("run_*.json"):
@@ -660,8 +478,6 @@ def _process_csv_dataset(csv_path: str, client: openai.OpenAI, args, tool_handle
             top_p=args.top_p,
         )
         
-        # try:
-        # breakpoint()
         if True:
             response, combined_output, cumulative_usage, tool_outputs = await run_conversation_with_tools_async(
                 client, request_body, tool_handler, args.max_iterations
