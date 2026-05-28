@@ -1,6 +1,6 @@
 # VeriTrip
 
-This repository contains the code for an AI-powered travel planning system that uses large language models (LLMs) with retrieval-augmented search, vision-language capabilities, and multi-dimensional evaluation of generated travel plans.
+This repository contains the code for an agentic travel planning system that uses MLLMs with retrieval-augmented search, vision-language capabilities, and multi-dimensional evaluation of generated travel plans.
 
 ## Directory Structure
 
@@ -99,7 +99,8 @@ python search_agent_w_img_retriver/openai_client_vl_retriver.py \
 
 Replace `openai_client_vl_retriver.py` with the appropriate client file (`claude_client_vl_retriver.py`, `gemini_client_vl_retriver.py`, etc.) for different LLM providers.
 
-```
+
+
 
 ### 3. Evaluate Generated Plans
 
