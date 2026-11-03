@@ -112,7 +112,7 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
 
         # Assuming parse_itinerary_to_dataframes and validate_tables are defined
         dfs = parse_itinerary_to_dataframes_add_header(llm_output_content)
-        format_is_valid, errs = validate_tables(dfs)
+        format_is_valid, errs, dr_score = validate_tables(dfs)
         if not format_is_valid:
             print(errs)
         commonsense_info_box = None
@@ -143,7 +143,7 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
         plan_constraint_store.append({
             'query_id': query_id, 
             'query_data': query_data,
-            'delivered': delivered,
+            'dr_score': dr_score,
             'commonsense_constraint': commonsense_info_box, 
             'hard_constraint': hard_info_box,
             'average_margins': am_per_day
@@ -223,12 +223,15 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
         return summary
     # --- END OF NEW SUMMARY FUNCTION ---
 
-    # 4. Assemble Overall Summary
-    delivered_plans = [p for p in plan_constraint_store if p['delivered']]
-    delivery_cnt = len(delivered_plans)
-
+    dr_sum = sum(
+        p["dr_score"] for p in plan_constraint_store
+    )
+    
     overall_summary = {
-        'Delivery Rate': f"{delivery_cnt / total_queries:.2%}" if total_queries > 0 else "0.00%",
+        "Delivery Rate": (
+            f"{dr_sum / total_queries:.2%}"
+            if total_queries > 0 else "N/A"
+        ),
     }
     overall_summary.update(get_commonsense_summary(delivered_plans, total_queries))
     
@@ -287,8 +290,14 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
         if diff_total_queries == 0: continue
         
         diff_delivered_plans = [p for p in diff_plans if p['delivered']]
-        diff_delivery_cnt = len(diff_delivered_plans)
+        diff_dr_sum = sum(
+            p["dr_score"] for p in diff_plans
+        )
         
+        diff_summary = {
+            "Delivery Rate":
+                f"{diff_dr_sum / diff_total_queries:.2%}"
+        }
         diff_summary = {
             'Delivery Rate': f"{diff_delivery_cnt / diff_total_queries:.2%}"
         }
