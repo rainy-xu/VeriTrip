@@ -107,7 +107,7 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
             llm_output_content = f.read() 
 
         if not llm_output_content or llm_output_content.isspace():
-            plan_constraint_store.append({'query_id': query_id, 'query_data': query_data, 'delivered': False})
+            plan_constraint_store.append({'query_id': query_id, 'query_data': query_data, 'delivered': False,'dr_score',0.0})
             continue
 
         # Assuming parse_itinerary_to_dataframes and validate_tables are defined
