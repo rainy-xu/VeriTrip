@@ -181,8 +181,7 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
                 if passed: pref_pass_counts[name] += 1
             
             # Macro counts
-            # all_rules_passed = all(v[0] for v in rules.values())
-            all_rules_passed = sum(not v[0] for v in rules.values()) < 2
+            all_rules_passed = all(v[0] for v in rules.values())
             all_prefs_passed = all(v[0] for v in prefs.values())
             if all_rules_passed: rules_macro_pass_count += 1
             if all_prefs_passed: prefs_macro_pass_count += 1
