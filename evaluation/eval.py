@@ -298,9 +298,6 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
             "Delivery Rate":
                 f"{diff_dr_sum / diff_total_queries:.2%}"
         }
-        diff_summary = {
-            'Delivery Rate': f"{diff_delivery_cnt / diff_total_queries:.2%}"
-        }
         diff_summary.update(get_commonsense_summary(diff_delivered_plans, diff_total_queries))
         
         # ... [Keep your existing per-difficulty Factual Reliability and AM calculations here] ...
