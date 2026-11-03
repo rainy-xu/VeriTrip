@@ -143,6 +143,7 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
         plan_constraint_store.append({
             'query_id': query_id, 
             'query_data': query_data,
+            "delivered": delivered,
             'dr_score': dr_score,
             'commonsense_constraint': commonsense_info_box, 
             'hard_constraint': hard_info_box,
@@ -287,19 +288,28 @@ def run_evaluation(query_csv_path: str, output_dir_path: str):
     for diff in difficulties:
         diff_plans = grouped_plans[diff]
         diff_total_queries = len(diff_plans)
-        if diff_total_queries == 0: continue
-        
-        diff_delivered_plans = [p for p in diff_plans if p['delivered']]
+        if diff_total_queries == 0:
+            continue
+    
+        diff_delivered_plans = [
+            p for p in diff_plans if p["delivered"]
+        ]
+    
         diff_dr_sum = sum(
-            p["dr_score"] for p in diff_plans
+            p.get("dr_score", 0.0) for p in diff_plans
         )
-        
+    
         diff_summary = {
             "Delivery Rate":
                 f"{diff_dr_sum / diff_total_queries:.2%}"
         }
-        diff_summary.update(get_commonsense_summary(diff_delivered_plans, diff_total_queries))
-        
+    
+        diff_summary.update(
+            get_commonsense_summary(
+                diff_delivered_plans,
+                diff_total_queries,
+            )
+        )
         # ... [Keep your existing per-difficulty Factual Reliability and AM calculations here] ...
         diff_hard_true, diff_hard_false = 0, 0
         for p in diff_plans:
